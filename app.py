@@ -13,8 +13,13 @@ SHEET_NAME = "forklift_db"
 @st.cache_resource
 def init_connection():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    # Streamlit CloudのSecretsから認証情報を読み込む
-    creds_dict = st.secrets["gcp_service_account"]
+    
+    # Secretsから辞書として読み込む（コピーを作成）
+    creds_dict = dict(st.secrets["gcp_service_account"])
+    
+    # 【重要】private_keyの改行コード文字化けを修正する処理
+    creds_dict["private_key"] = creds_dict["private_key"].replace("\\n", "\n")
+    
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     return client
@@ -86,4 +91,5 @@ if not df.empty:
     # データテーブル表示
     st.dataframe(df_display.sort_values('日付', ascending=False))
 else:
+
     st.info("データがありません。サイドバーから登録してください。")
