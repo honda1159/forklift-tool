@@ -153,10 +153,16 @@ with tab1:
                 yaxis_title="累計費用 (円)",
                 height=500,
                 showlegend=True,
-                font=dict(size=14)
+                font=dict(size=14),
+                # データ変更時のアニメーション設定
+                transition={
+                    'duration': 800, 
+                    'easing': 'cubic-in-out'
+                }
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            # keyを指定することで、同じグラフの更新としてアニメーションを有効にする
+            st.plotly_chart(fig, use_container_width=True, key="tco_chart")
 
             # --- クロージングメッセージ ---
             diff = (spot_maintenance_total + risk_cost) - contract_total
@@ -188,3 +194,4 @@ with tab2:
 
     if not df_log.empty:
         st.dataframe(df_log, use_container_width=True)
+
