@@ -1,9 +1,10 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials # ←ここが変わりました
+from google.oauth2.service_account import Credentials
 import plotly.express as px
 from datetime import datetime
+import json
 
 # --- 設定 ---
 SHEET_NAME = "forklift_db"
@@ -16,17 +17,12 @@ def init_connection():
         "https://www.googleapis.com/auth/drive"
     ]
     
-    # Secretsから情報を取得
-    creds_dict = dict(st.secrets["gcp_service_account"])
+    # 【変更点】Secretsから「JSONファイルの中身」を丸ごと取得して辞書に変換
+    # 以前のような replace 処理は不要になります
+    json_content = st.secrets["gcp_service_account"]["json_file"]
+    creds_dict = json.loads(json_content)
     
-    # 【重要】鍵のフォーマット修正（改行コードの修正を強化）
-    # JSONの \n が文字として入っている場合と、そのまま入っている場合の両方に対応
-    private_key = creds_dict["private_key"]
-    if "\\n" in private_key:
-        private_key = private_key.replace("\\n", "\n")
-    creds_dict["private_key"] = private_key
-
-    # 新しいライブラリで認証
+    # 認証
     creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
     return client
@@ -76,26 +72,28 @@ with st.sidebar.form("entry_form"):
 # メイン画面：分析
 st.header("📊 整備コスト分析")
 
-df = get_data()
+try:
+    df = get_data()
+    if not df.empty:
+        df['日付'] = pd.to_datetime(df['日付'])
+        
+        vehicle_list = df['ID'].unique()
+        selected_vehicle = st.selectbox("車両を選択して詳細を表示", ["全て"] + list(vehicle_list))
+        
+        if selected_vehicle != "全て":
+            df_display = df[df['ID'] == selected_vehicle]
+        else:
+            df_display = df
 
-if not df.empty:
-    df['日付'] = pd.to_datetime(df['日付'])
-    
-    vehicle_list = df['ID'].unique()
-    selected_vehicle = st.selectbox("車両を選択して詳細を表示", ["全て"] + list(vehicle_list))
-    
-    if selected_vehicle != "全て":
-        df_display = df[df['ID'] == selected_vehicle]
+        total_cost = df_display['費用'].sum()
+        st.metric(label="合計整備費用", value=f"¥{total_cost:,}")
+
+        fig = px.bar(df_display, x='日付', y='費用', color='区分', 
+                     title='整備費用の推移', hover_data=['メモ'])
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.dataframe(df_display.sort_values('日付', ascending=False))
     else:
-        df_display = df
-
-    total_cost = df_display['費用'].sum()
-    st.metric(label="合計整備費用", value=f"¥{total_cost:,}")
-
-    fig = px.bar(df_display, x='日付', y='費用', color='区分', 
-                 title='整備費用の推移', hover_data=['メモ'])
-    st.plotly_chart(fig, use_container_width=True)
-
-    st.dataframe(df_display.sort_values('日付', ascending=False))
-else:
-    st.info("データがありません。サイドバーから登録してください。")
+        st.info("データがありません。サイドバーから登録してください。")
+except Exception as e:
+    st.warning("データを読み込めませんでした。スプレッドシートの設定を確認してください。")
